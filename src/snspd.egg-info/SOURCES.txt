@@ -1,0 +1,17 @@
+pyproject.toml
+src/snspd/__init__.py
+src/snspd.egg-info/PKG-INFO
+src/snspd.egg-info/SOURCES.txt
+src/snspd.egg-info/dependency_links.txt
+src/snspd.egg-info/requires.txt
+src/snspd.egg-info/top_level.txt
+src/snspd/core/__init__.py
+src/snspd/core/constants.py
+src/snspd/core/units.py
+src/snspd/geometry/__init__.py
+src/snspd/geometry/analyzer.py
+src/snspd/geometry/geometry.py
+src/snspd/geometry/svg_importer.py
+src/snspd/visualization/__init__.py
+src/snspd/visualization/geometry_plot.py
+tests/test_geometry.py

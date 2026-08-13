@@ -1,0 +1,48 @@
+<!--
+FILE: examples/simple_meander.svg
+PURPOSE:
+Synthetic SNSPD nanowire meander used to test the geometry pipeline.
+
+The geometry is represented as a centerline with a physical stroke width.
+This is closer to how an SNSPD layout should be interpreted than a
+self-intersecting filled polygon.
+
+This is a software test geometry, NOT a validated physical SNSPD design.
+-->
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="20um"
+    height="20um"
+    viewBox="0 0 20 20">
+
+    <path
+        id="snspd_meander"
+        d="
+            M 2,2
+            H 18
+            V 4
+            H 2
+            V 6
+            H 18
+            V 8
+            H 2
+            V 10
+            H 18
+            V 12
+            H 2
+            V 14
+            H 18
+            V 16
+            H 2
+            V 18
+            H 18
+        "
+        fill="none"
+        stroke="black"
+        stroke-width="1"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+    />
+
+</svg>

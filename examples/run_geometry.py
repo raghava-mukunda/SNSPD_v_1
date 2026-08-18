@@ -36,7 +36,7 @@ def main():
 
     svg_file = (
         Path(__file__).parent
-        / "simple_meander.svg"
+        / "meander_processed.svg"
     )
 
     print(

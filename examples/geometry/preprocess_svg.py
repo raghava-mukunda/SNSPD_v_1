@@ -148,22 +148,26 @@ def render_svg(svg_path: str, scale: float) -> Image.Image:
 # RED/PINK MASK
 # ============================================================
 
+# ============================================================
+# BLUE MASK
+# ============================================================
+
 def create_red_mask(
     image: Image.Image,
-    red_threshold: int = 120,
-    color_difference: int = 20,
+    blue_threshold: int = 100,
+    color_difference: int = 30,
 ) -> np.ndarray:
 
     """
-    Detect red/pink geometry.
+    Detect blue/cyan geometry.
 
     Condition:
 
-        R > threshold
-        R - G > difference
-        R - B > difference
+        B > threshold
+        B - R > difference
+        B - G > difference
 
-    This intentionally rejects white/light-gray background.
+    This rejects white/light-gray background.
     """
 
     rgb = np.asarray(image).astype(np.int16)
@@ -173,15 +177,14 @@ def create_red_mask(
     b = rgb[:, :, 2]
 
     mask = (
-        (r >= red_threshold)
+        (b >= blue_threshold)
         &
-        ((r - g) >= color_difference)
+        ((b - r) >= color_difference)
         &
-        ((r - b) >= color_difference)
+        ((b - g) >= color_difference)
     )
 
     return mask
-
 
 # ============================================================
 # MASK CLEANUP

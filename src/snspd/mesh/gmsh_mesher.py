@@ -55,6 +55,8 @@ class GmshMesher:
     def __init__(
         self,
         characteristic_length: float,
+        corner_refinement_length: float | None = None,
+        corner_refinement_radius: float | None = None,
     ):
         """
         Parameters
@@ -76,6 +78,35 @@ class GmshMesher:
 
         self.characteristic_length = (
             float(characteristic_length)
+        )
+
+        if corner_refinement_length is not None:
+            if corner_refinement_length <= 0.0:
+                raise ValueError(
+                    "Corner refinement length must be positive."
+                )
+            if corner_refinement_length > self.characteristic_length:
+                raise ValueError(
+                    "Corner refinement length cannot exceed "
+                    "the global characteristic length."
+                )
+
+        if corner_refinement_radius is not None:
+            if corner_refinement_radius <= 0.0:
+                raise ValueError(
+                    "Corner refinement radius must be positive."
+                )
+
+        self.corner_refinement_length = (
+            None
+            if corner_refinement_length is None
+            else float(corner_refinement_length)
+        )
+
+        self.corner_refinement_radius = (
+            None
+            if corner_refinement_radius is None
+            else float(corner_refinement_radius)
         )
 
     # ============================================================
@@ -307,6 +338,99 @@ class GmshMesher:
         )
 
     # ============================================================
+    # PHYSICS-DRIVEN LOCAL CORNER REFINEMENT
+    # ============================================================
+
+    def _add_corner_refinement_fields(
+        self,
+        geometry: DeviceGeometry,
+    ) -> None:
+        """
+        Add Gmsh Distance/Threshold fields around sharp boundary
+        vertices.
+
+        The refinement is purely geometric: it does not alter the
+        FEM equations or fabricate sub-element physics.
+
+        If corner_refinement_length is None, the legacy uniform mesh
+        is retained.
+
+        The field is applied around polygon vertices.  For an SNSPD
+        meander, this provides the fine mesh required to resolve the
+        local current-density singular/asymptotic region near turns.
+
+        Parameters
+        ----------
+        geometry:
+            Canonical device geometry.
+        """
+
+        if (
+            self.corner_refinement_length is None
+            or self.corner_refinement_radius is None
+        ):
+            return
+
+        point_tags = []
+
+        # Reconstructing the Gmsh point tags from geometry would be
+        # unreliable because tags are local to _add_polygon().  Instead,
+        # query all 0-D entities created by the CAD kernel and use their
+        # coordinates.  The distance field is therefore applied to every
+        # CAD vertex, which is conservative and remains geometry-driven.
+        entities = gmsh.model.getEntities(0)
+
+        for _, tag in entities:
+            point_tags.append(int(tag))
+
+        if not point_tags:
+            return
+
+        distance_field = gmsh.model.mesh.field.add("Distance")
+
+        gmsh.model.mesh.field.setNumbers(
+            distance_field,
+            "NodesList",
+            point_tags,
+        )
+
+        threshold_field = gmsh.model.mesh.field.add("Threshold")
+
+        gmsh.model.mesh.field.setNumber(
+            threshold_field,
+            "InField",
+            distance_field,
+        )
+
+        gmsh.model.mesh.field.setNumber(
+            threshold_field,
+            "SizeMin",
+            self.corner_refinement_length,
+        )
+
+        gmsh.model.mesh.field.setNumber(
+            threshold_field,
+            "SizeMax",
+            self.characteristic_length,
+        )
+
+        gmsh.model.mesh.field.setNumber(
+            threshold_field,
+            "DistMin",
+            0.0,
+        )
+
+        gmsh.model.mesh.field.setNumber(
+            threshold_field,
+            "DistMax",
+            self.corner_refinement_radius,
+        )
+
+        gmsh.model.mesh.field.setAsBackgroundMesh(
+            threshold_field
+        )
+
+    # ============================================================
     # MESH GENERATION
     # ============================================================
 
@@ -470,15 +594,31 @@ class GmshMesher:
             # MESH CONTROL
             # ====================================================
 
+            # The global characteristic length remains the fallback.
+            # Local Distance/Threshold fields below override it around
+            # geometry vertices when requested.
             gmsh.option.setNumber(
                 "Mesh.CharacteristicLengthMin",
-                self.characteristic_length,
+                min(
+                    self.characteristic_length,
+                    self.corner_refinement_length
+                    if self.corner_refinement_length is not None
+                    else self.characteristic_length,
+                ),
             )
 
             gmsh.option.setNumber(
                 "Mesh.CharacteristicLengthMax",
                 self.characteristic_length,
             )
+
+            if (
+                self.corner_refinement_length is not None
+                and self.corner_refinement_radius is not None
+            ):
+                self._add_corner_refinement_fields(
+                    geometry
+                )
 
             # ----------------------------------------------------
             # Frontal-Delaunay 2D algorithm.
@@ -804,6 +944,12 @@ class GmshMesher:
                     "dimension": 2,
                     "characteristic_length_m": (
                         self.characteristic_length
+                    ),
+                    "corner_refinement_length_m": (
+                        self.corner_refinement_length
+                    ),
+                    "corner_refinement_radius_m": (
+                        self.corner_refinement_radius
                     ),
                 },
             )

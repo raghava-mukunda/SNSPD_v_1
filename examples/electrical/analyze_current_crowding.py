@@ -1598,7 +1598,9 @@ def main():
     )
 
     mesher = GmshMesher(
-        characteristic_length=MESH_SIZE
+        characteristic_length=MESH_SIZE,
+        corner_refinement_length=5e-9,
+        corner_refinement_radius=100e-9,
     )
 
     mesh = mesher.generate(

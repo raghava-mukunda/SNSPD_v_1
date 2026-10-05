@@ -1108,7 +1108,22 @@ def import_svg(
                     element,
                     "fill",
                     "black",
-                ).lower()
+                ).strip().lower()
+
+                # --------------------------------------------------
+                # IGNORE PURE-WHITE BACKGROUND PATHS
+                # --------------------------------------------------
+                #
+                # Some SVG exporters store the drawing together with
+                # a white background as a second filled <path>.
+                # White is presentation/background here, not physical
+                # SNSPD material. Importing it as a conductor creates
+                # artificial overlapping GeometryRegions.
+                #
+                # Do this before any path-to-polygon conversion.
+                # --------------------------------------------------
+                if fill in {"#ffffff", "white", "rgb(255,255,255)", "rgb(255, 255, 255)"}:
+                    continue
 
                 stroke = _element_style(
                     element,

@@ -101,7 +101,7 @@ class ClemBerggrenParameters:
 
     # Maximum allowed distance from corner as a fraction of
     # the local wire width.
-    maximum_fit_width_fraction: float = 0.25
+    maximum_fit_width_fraction: float = 0.50
 
     # Number of rays used in the physical wedge sector.  Keeping this
     # explicit makes the numerical resolution controllable without
@@ -840,41 +840,155 @@ def _local_mesh_length(
     vertex: int | None = None,
 ) -> float:
     """
-    Estimate the local FEM length scale near a corner.
+    Estimate the local FEM resolution length near a boundary vertex.
 
-    The estimate is based on the edges of triangles incident on the
-    corner.  It is used only to determine whether the FEM mesh can
-    actually resolve the Clem-Berggren asymptotic region.
+    The local length scale is obtained from the actual finite-element
+    triangles incident on the vertex.
 
-    No interpolation or artificial sub-element resolution is introduced.
+    For a P1 triangular FEM mesh, the characteristic local resolution
+    is taken as the median length of the edges belonging to the
+    incident elements.
+
+    This function is used only to establish whether the FEM mesh can
+    resolve the asymptotic Clem-Berggren region.
+
+    No interpolation, extrapolation, or sub-element current-density
+    reconstruction is performed.
     """
 
+    if vertex is None:
+        return np.nan
+
+    nodes = np.asarray(
+        nodes_m,
+        dtype=float,
+    )
+
+    tris = np.asarray(
+        triangles,
+        dtype=np.int64,
+    )
+
+    vertex = int(vertex)
+
+    if vertex < 0 or vertex >= len(nodes):
+        return np.nan
+
     if (
-        graph is None
-        or vertex is None
+        tris.ndim != 2
+        or tris.shape[1] != 3
+        or len(tris) == 0
     ):
         return np.nan
 
-    neighbors = graph.get(int(vertex), [])
+    # ------------------------------------------------------------
+    # Find all FEM elements incident on this vertex.
+    # ------------------------------------------------------------
 
-    if len(neighbors) != 2:
+    incident_mask = np.any(
+        tris == vertex,
+        axis=1,
+    )
+
+    incident_triangles = tris[
+        incident_mask
+    ]
+
+    if len(incident_triangles) == 0:
         return np.nan
 
-    lengths = []
+    # ------------------------------------------------------------
+    # Collect the actual edges of the incident triangles.
+    #
+    # We deliberately use all local FEM edges rather than assuming
+    # that the boundary graph has degree exactly two.
+    # ------------------------------------------------------------
 
-    p = nodes_m[int(vertex)]
+    edge_lengths = []
 
-    for n in neighbors:
-        q = nodes_m[int(n)]
-        length = float(np.linalg.norm(q - p))
-        if length > 0.0:
-            lengths.append(length)
+    p0 = nodes[vertex]
 
-    if not lengths:
+    for tri in incident_triangles:
+
+        for node in tri:
+
+            node = int(node)
+
+            if node == vertex:
+                continue
+
+            p = nodes[node]
+
+            length = float(
+                np.linalg.norm(
+                    p - p0
+                )
+            )
+
+            if (
+                np.isfinite(length)
+                and length > 0.0
+            ):
+                edge_lengths.append(
+                    length
+                )
+
+        # Also include the opposite edge of the triangle.
+        others = [
+            int(node)
+            for node in tri
+            if int(node) != vertex
+        ]
+
+        if len(others) == 2:
+
+            p1 = nodes[others[0]]
+            p2 = nodes[others[1]]
+
+            length = float(
+                np.linalg.norm(
+                    p2 - p1
+                )
+            )
+
+            if (
+                np.isfinite(length)
+                and length > 0.0
+            ):
+                edge_lengths.append(
+                    length
+                )
+
+    if not edge_lengths:
         return np.nan
 
-    return float(np.median(lengths))
+    lengths = np.asarray(
+        edge_lengths,
+        dtype=float,
+    )
 
+    # Remove numerical duplicates.
+    lengths = np.unique(
+        np.round(
+            lengths,
+            decimals=18,
+        )
+    )
+
+    if len(lengths) == 0:
+        return np.nan
+
+    # The median is robust against:
+    #
+    #   * one unusually large transition element
+    #   * one extremely small refinement element
+    #   * graded meshes
+    #
+    # and represents the local FEM resolution without inventing
+    # sub-element information.
+    return float(
+        np.median(lengths)
+    )
 
 def _ray_triangle_samples(
     corner_xy: np.ndarray,
@@ -1086,7 +1200,7 @@ def fit_corner_current(
     minimum_fit_points: int = 8,
     minimum_fit_r2: float = 0.80,
     fit_r_min_factor: float = 3.0,
-    maximum_fit_width_fraction: float = 0.25,
+    maximum_fit_width_fraction: float = 0.50,
     number_of_rays: int = 25,
     trifinder=None,
     progress_callback: Callable[[int, int], None] | None = None,
